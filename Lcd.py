@@ -75,6 +75,7 @@ class Lcd:
         self.bus.write_byte(self._addr, byte)
 
     def begin(self, cols, lines, dotsize = 0):
+        self._autoscroll = True
         if lines > 1:
             self._displayfunction |= LCD_2LINE
         self._numlines = lines
@@ -196,8 +197,10 @@ class Lcd:
     # This will 'right justify' text from the cursor
     def autoscroll(self, b = True):
         if b:
+            self._autoscroll = True
             self._displaymode |= LCD_ENTRYSHIFTINCREMENT
         else:
+            self._autoscroll = False
             self._displaymode &= ~LCD_ENTRYSHIFTINCREMENT
         self.command(LCD_ENTRYMODESET | self._displaymode)
         
@@ -248,9 +251,11 @@ class Lcd:
     def expanderWrite(self, data):
         self.printIIC( data | self._backlightval)
 
-    def print( self, line, row = 0, clear = True, backlight = True):
-        if len(line) > self._col * self._row:
-            self.print("OverFlow", 0)           
+    def print( self, line, col=0,  row=0, clear=True, backlight=True):
+        col = col % self._col
+        row += col // self._col
+        if len(line) + row *self._col  + col > self._col * self._row:
+            self.print("OverFlow")           
             return -1
         if clear:
             self.clear()
@@ -258,22 +263,41 @@ class Lcd:
             self.backlight()
         if not backlight and self._backlightval is LCD_BACKLIGHT:
             self.backlight(False)
-        self.home()
+        if not self._autoscroll:
+            self.autoscroll()
+        if col is 0 and row is 0:
+            self.home()
+        else:
+            self.setCursor(col, row)
         for i in range(len(line)):
-            if not i % self._col:
-                self.setCursor(0, i // self._col)
+            if not (i + col) % self._col:
+                self.setCursor(0, (i + col) // self._col)
             self.write(ord(line[i]))
 
         
 class LoopDisplay( threading.Thread):
-    msg = None 
+    ''' Continue showing Message(msg), if msg is None, then showing IP + Time'''
+    msg = None
+    _col = 16 
+    _lastDisplay =""
     def setLcd(self, addr, port, col, row):
         self.lcd = Lcd(addr, port, col, row)
+        self._col = col
     def run(self):
         while self.lcd:
             if self.msg:
                 self.lcd.print(self.msg) 
             else:
-                self.lcd.print(datetime.now().isoformat().split('T')[1].split('.')[0] + ' '*8 +
-                socket.gethostbyname(socket.gethostname()), backlight=False) 
+                ip = socket.gethostbyname(socket.gethostname())
+                if len(ip) < self._col:
+                    ip += ' ' *  (self._col - len(ip)) 
+                time = ' ' * (self._col - 8) + datetime.now().isoformat().split('T')[1].split('.')[0]
+                out = ip + time
+                if self._lastDisplay:
+                    for i in range(len(out)):
+                        if i = len(self._lastDisplay) or out[i] != self._lastDisplay[i]:
+                            self.lcd.print( out[i:], clear=False, backlight=False)
+                            break
+                else:
+                    self.lcd.print( out, backlight=False) 
             sleep(1)
