@@ -252,8 +252,8 @@ class Lcd:
         self.printIIC( data | self._backlightval)
 
     def print( self, line, col=0,  row=0, clear=True, backlight=True):
-        col = col % self._col
         row += col // self._col
+        col = col % self._col
         if len(line) + row *self._col  + col > self._col * self._row:
             self.print("OverFlow")           
             return -1
@@ -283,10 +283,13 @@ class LoopDisplay( threading.Thread):
     def setLcd(self, addr, port, col, row):
         self.lcd = Lcd(addr, port, col, row)
         self._col = col
+        self.start()
     def run(self):
         while self.lcd:
             if self.msg:
-                self.lcd.print(self.msg) 
+                if self.msg != self._lastDisplay:
+                    self.lcd.print(self.msg) 
+                self._lastDisplay = self.msg
             else:
                 ip = socket.gethostbyname(socket.gethostname())
                 if len(ip) < self._col:
@@ -295,9 +298,10 @@ class LoopDisplay( threading.Thread):
                 out = ip + time
                 if self._lastDisplay:
                     for i in range(len(out)):
-                        if i = len(self._lastDisplay) or out[i] != self._lastDisplay[i]:
-                            self.lcd.print( out[i:], clear=False, backlight=False)
+                        if i == len(self._lastDisplay) or out[i] != self._lastDisplay[i]:
+                            self.lcd.print( out[i:], col=i , clear=False, backlight=False)
                             break
                 else:
                     self.lcd.print( out, backlight=False) 
+                self._lastDisplay = out
             sleep(1)
