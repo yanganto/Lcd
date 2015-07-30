@@ -280,6 +280,7 @@ class LoopDisplay( threading.Thread):
     msg = None
     _col = 16 
     _lastDisplay =""
+    _showInSec = 0
     def __init__(self, addr, port, col=16, row=2):
         super(LoopDisplay, self).__init__()
         self.setLcd(addr, port, col, row)
@@ -289,12 +290,18 @@ class LoopDisplay( threading.Thread):
         self._col = col
         self.start()
         
+    def show( self, msg, showSec = 5):
+        self.msg = msg
+        self._showInSec = showSec
+        
     def run(self):
         while self.lcd:
-            if self.msg:
+            if self._showInSec:
                 if self.msg != self._lastDisplay:
-                    self.lcd.print(self.msg) 
+                    self.lcd.print(self.msg)
+                self._showInSec -= 1 
                 self._lastDisplay = self.msg
+                if not self._showInSec: msg = None
             else:
                 ip = socket.gethostbyname(socket.gethostname())
                 if len(ip) < self._col:
