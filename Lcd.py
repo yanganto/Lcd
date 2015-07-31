@@ -56,7 +56,7 @@ Rs = 0x01 # Register select bit
 
 
 class Lcd:
-    def __init__(self, addr, port, col, row):
+    def __init__(self, port, addr, col, row):
         self._addr = addr
         self.bus = smbus.SMBus(port)  
         self._col = col
@@ -277,43 +277,45 @@ class Lcd:
         
 class LoopDisplay( threading.Thread):
     ''' Continue showing Message(msg), if msg is None, then showing IP + Time'''
-    msg = None
-    _col = 16 
-    _lastDisplay =""
-    _showInSec = 0
-    def __init__(self, addr, port, col=16, row=2):
-        super(LoopDisplay, self).__init__()
-        self.setLcd(addr, port, col, row)
+    regist = {} # store each I2C device, Key is a tuple (I2C_Port, I2C_Address), ex: (1, 0x27)
+    def __init__(self, port, addr, col=16, row=2):
+        if (port, addr) in LoopDisplay.regist:
+            self = LoopDisplay.regist[(port, addr)]
+        else:
+            super(LoopDisplay, self).__init__()
+            self.setLcd(port, addr,  col, row)
+            LoopDisplay.regist[(port, addr)] = self 
+            self.start()
         
-    def setLcd(self, addr, port, col, row):
-        self.lcd = Lcd(addr, port, col, row)
+    def setLcd(self, port, addr, col, row):
+        self.lcd = Lcd( port, addr, col, row)
         self._col = col
-        self.start()
+
         
-    def show( self, msg, showSec = 5):
+    def show( self, msg, showSec=5):
         self.msg = msg
         self._showInSec = showSec
         
     def run(self):
         while self.lcd:
             if self._showInSec:
-                if self.msg != self._lastDisplay:
+                if self.msg != self._presentMsg:
                     self.lcd.print(self.msg)
                 self._showInSec -= 1 
-                self._lastDisplay = self.msg
-                if not self._showInSec: msg = None
+                self._presentMsg = self.msg
+                if not self._showInSec: del self.msg
             else:
                 ip = socket.gethostbyname(socket.gethostname())
                 if len(ip) < self._col:
                     ip += ' ' *  (self._col - len(ip)) 
                 time = ' ' * (self._col - 8) + datetime.now().isoformat()[11:19]
                 out = ip + time
-                if self._lastDisplay:
+                if self._presentMsg:
                     for i in range(len(out)):
-                        if i == len(self._lastDisplay) or out[i] != self._lastDisplay[i]:
+                        if i == len(self._presentMsg) or out[i] != self._presentMsg[i]:
                             self.lcd.print( out[i:], col=i , clear=False, backlight=False)
                             break
                 else:
                     self.lcd.print( out, backlight=False) 
-                self._lastDisplay = out
+                self._presentMsg = out
             sleep(1)
