@@ -277,16 +277,21 @@ class Lcd:
         
 class LoopDisplay( threading.Thread ):
     ''' Continue showing Message(msg) in queue, if msg is None, then showing IP + Time'''
-    regist = {} # store each I2C device, Key is a tuple (I2C_Port, I2C_Address), ex: (1, 0x27)
+    __regist = {} # store each I2C device, Key is a tuple (I2C_Port, I2C_Address), ex: (1, 0x27)
+
+    def __new__(clz, port, addr, col=16, row=2 ):
+        if (port, addr) in LoopDisplay.__regist:
+            return LoopDisplay.__regist[(port, addr)]
+        return object.__new__(clz)
+
     def __init__(self, port, addr, col=16, row=2):
-        if (port, addr) in LoopDisplay.regist:
-            self = LoopDisplay.regist[(port, addr)]
-        else:
+        if (port, addr) not in LoopDisplay.__regist:
             super(LoopDisplay, self).__init__()
             self.setLcd(port, addr,  col, row)
-            LoopDisplay.regist[(port, addr)] = self 
+            self._presentMsg = None 
             self.start()
-            
+            LoopDisplay.__regist[(port, addr)] = self 
+                    
     def __del__(self):
         self.lcd = None
         
@@ -296,7 +301,7 @@ class LoopDisplay( threading.Thread ):
         self._col = col
         
     def show( self, msg, showSec=5):
-        self._msg.add((msg, showSec))
+        self._msg.append((msg, showSec))
         
     def run(self):
         while self.lcd:
