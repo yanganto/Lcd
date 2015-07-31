@@ -275,8 +275,8 @@ class Lcd:
             self.write(ord(line[i]))
 
         
-class LoopDisplay( threading.Thread):
-    ''' Continue showing Message(msg), if msg is None, then showing IP + Time'''
+class LoopDisplay( threading.Thread ):
+    ''' Continue showing Message(msg) in queue, if msg is None, then showing IP + Time'''
     regist = {} # store each I2C device, Key is a tuple (I2C_Port, I2C_Address), ex: (1, 0x27)
     def __init__(self, port, addr, col=16, row=2):
         if (port, addr) in LoopDisplay.regist:
@@ -286,24 +286,27 @@ class LoopDisplay( threading.Thread):
             self.setLcd(port, addr,  col, row)
             LoopDisplay.regist[(port, addr)] = self 
             self.start()
+            
+    def __del__(self):
+        self.lcd = None
         
     def setLcd(self, port, addr, col, row):
         self.lcd = Lcd( port, addr, col, row)
+        self._msg = [] # Queue of List to show, each Element is ( Message, timeToShow), ex: ("msg", 5)
         self._col = col
-
         
     def show( self, msg, showSec=5):
-        self.msg = msg
-        self._showInSec = showSec
+        self._msg.add((msg, showSec))
         
     def run(self):
         while self.lcd:
-            if self._showInSec:
-                if self.msg != self._presentMsg:
-                    self.lcd.print(self.msg)
+            if self._msg:
+                if self._msg[0][0] != self._presentMsg:
+                    self.lcd.print(self._msg[0][0])
+                    self._showInSec = self._msg[0][1] 
                 self._showInSec -= 1 
-                self._presentMsg = self.msg
-                if not self._showInSec: del self.msg
+                self._presentMsg = self._msg[0][0]
+                if not self._showInSec: del self._msg[0]
             else:
                 ip = socket.gethostbyname(socket.gethostname())
                 if len(ip) < self._col:
